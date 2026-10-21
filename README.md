@@ -1,277 +1,193 @@
-# TimeCapsule: pure PHP (functional style)
+# Лабораторная работа №2. Облачные вычислительные сервисы. Amazon EC2
 
-This is the TimeCapsule app written in plain PHP (8.2+) without a framework, in a procedural
-("functional") style: the code is plain functions in a few files, with no classes of our own.
-It uses PDO for PostgreSQL and plain PHP templates. The only PHP library is
-[vlucas/phpdotenv](https://github.com/vlucas/phpdotenv), which reads the `.env` file; it is
-installed with [Composer](https://getcomposer.org). In the browser, the date and time picker is
-[flatpickr](https://flatpickr.js.org) (MIT license), vendored in `public/vendor/flatpickr`. The [root README](../README.md) explains
-what the app does. [`../open_capsules_php_oop`](../open_capsules_php_oop) is the same app written with classes.
+| | |
+|---|---|
+| **Студент** | Noroc Eugeniu |
+| **Группа** | IA2404 |
+| **Специальность** | Informatică aplicată |
+| **Email** | eukoron@gmail.com |
+| **Уровень** | Продвинутый |
+| **Регион AWS** | eu-north-1 (Stockholm) |
+| **Приложение** | TimeCapsule - open_capsules_php_functional |
+| **Вариант деплоя** | A - команды выполняются на сервере вручную |
+| **Репозиторий** | https://github.com/eugeniu-noroc-cloud/timecapsule |
 
-```
-public/index.php                 front controller + route table (every request starts here)
-public/css/app.css               the only stylesheet
-public/js/app.js                 date/time picker, sends the open time as UTC, shows local times
-public/vendor/flatpickr/         flatpickr date/time picker (MIT, see LICENSE.md there)
-src/bootstrap.php                loads Composer + .env, sets UTC, error handler, sessions
-src/db.php                       PDO connection
-src/helpers.php                  config(), e(), view(), redirect(), flash(), time_tag(), countdown()
-src/csrf.php                     CSRF token for all forms
-src/auth.php                     current user, login/logout, AUTH_ENABLED switch
-src/storage.php                  save / delete / stream uploaded files (local disk)
-src/mailer.php                   simulated e-mail -> notifications table
-src/capsules.php                 capsule queries, open_due_capsules(), access rules, validation
-src/controllers/                 one file per page group
-views/                           HTML templates (layout.php + one file per page)
-bin/init-db.php                  creates the tables from database/schema.sql
-storage/uploads/                 uploaded files
-storage/sessions/                PHP session files
-deploy/nginx.conf                sample nginx site for an Ubuntu server
-composer.json / composer.lock    Composer packages (vendor/ is not in git)
-```
+> Работа выполнялась в регионе **eu-north-1 (Stockholm)** вместо eu-central-1, все команды адаптированы под этот регион.
 
-How the code is loaded: every entry point (`public/index.php`, `bin/init-db.php`) starts with
-`require 'src/bootstrap.php'`. The bootstrap file first loads `vendor/autoload.php`, which
-Composer generates and which makes the phpdotenv classes available. Then it loads our own
-function files with plain `require` statements, one per line, in a fixed order.
+---
 
-Composer could also load these files for us (`"autoload": {"files": [...]}` in
-`composer.json`). We use explicit `require` lines instead: you can see in one place exactly
-which files are loaded, and when you add a new file you only add one line to
-`src/bootstrap.php`, without running `composer dump-autoload`. Composer's autoloader is really
-made for classes, and this version of the app has none of its own.
+## Часть 1. Базовый уровень
 
-## Requirements
+### Задание 1. Подготовка аккаунта
 
-- **With Docker:** Docker Desktop (or Docker Engine) with Docker Compose v2. Nothing else.
-- **Without Docker:** PHP 8.2+ ([XAMPP](https://www.apachefriends.org) works) with the extensions
-  `pdo_pgsql`, `mbstring`, `fileinfo`, [Composer](https://getcomposer.org/download/) and a
-  PostgreSQL database you can connect to.
+Создан IAM-пользователь в группе `Admins` с политикой `AdministratorAccess`, вход в консоль выполняется под ним. Настроен бюджет с нулевым порогом.
 
-Windows: see [Setting up a Windows computer](../README.md#setting-up-a-windows-computer).
+![Бюджет ZeroSpend](images_lab_2/budget-zerospend.png)
+*Бюджет ZeroSpend в списке Budgets.*
 
-## Run without Docker
+**Что разрешает политика AdministratorAccess? Почему для повседневной работы нельзя использовать root?**
+AdministratorAccess разрешает любые действия (`Action: *`) над любыми ресурсами (`Resource: *`) во всех сервисах AWS. Права root ничем не ограничиваются, и только root может закрыть аккаунт, сменить email и платёжные данные. Если данные root утекут, аккаунт потерян полностью. Права IAM-пользователя можно ограничить или отозвать, а его действия видны отдельно. Поэтому root используется только для редких задач управления аккаунтом.
 
-1. Install the Composer packages and create the settings file:
+### Задание 2. Запуск экземпляра EC2
 
-   ```bash
-   composer install
-   cp .env.example .env
-   ```
+Запущен экземпляр `webserver` (Amazon Linux 2023, t3.micro) с Security Group `webserver-sg` (SSH с моего IP, HTTP отовсюду) и скриптом User data, устанавливающим nginx.
 
-2. Open `.env` and enter your database: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`.
+![Экземпляр в состоянии Running](images_lab_2/instance-running.png)
+*Экземпляр webserver в состоянии Running, 3/3 проверок пройдено.*
 
-3. Create the tables and start the app:
+![Страница nginx](images_lab_2/nginx-welcome.png)
+*Приветственная страница nginx по публичному IP экземпляра.*
 
-   ```bash
-   php bin/init-db.php
-   php -S localhost:8080 -t public
-   ```
+**Что такое User data и когда выполняется этот скрипт? Выполнится ли он повторно после перезагрузки?**
+User data - это скрипт, который передаётся экземпляру при запуске. Его выполняет cloud-init от имени root при первой загрузке экземпляра. После перезагрузки или Stop/Start он повторно не выполняется, если специально не настроить его на каждый запуск.
 
-4. Open http://localhost:8080 and create an account.
+### Задание 3. Мониторинг и диагностика
 
-The built-in server (`php -S`) is for development only. On a real server, use nginx + PHP-FPM
-(see below).
+![Вкладка Monitoring](images_lab_2/monitoring.png)
+*Метрики CloudWatch на вкладке Monitoring.*
 
-## Run with Docker
+![System log](images_lab_2/system-log.png)
+*Фрагмент System log с установкой nginx из User data.*
 
-Docker Desktop must be running.
+**Какая проверка укажет на проблему, которую можете исправить вы, а какая - на проблему на стороне AWS?**
+System status check отражает проблемы инфраструктуры AWS: физического сервера, сети, питания. Их решает AWS, а пользователь может только сделать Stop/Start, чтобы экземпляр переехал на другой хост. Instance status check указывает на проблемы внутри самой виртуальной машины (не загрузилась ОС, ошибка в сетевой конфигурации, переполнен диск), и исправлять их должен владелец экземпляра.
 
-```bash
-docker compose up --build
-```
+**В каких случаях стоит включать детальный мониторинг?**
+Когда важно быстро реагировать на изменения нагрузки: для автомасштабирования по CPU, для production-сервисов, где пятиминутная задержка метрик слишком велика, и при поиске коротких пиков нагрузки во время отладки производительности. Для учебного сервера достаточно базового мониторинга.
 
-Open http://localhost:8080. The image runs `composer install --no-dev` while it is built, so
-you do not need Composer on your machine. On startup the container waits for PostgreSQL, runs
-`php bin/init-db.php`, and then starts Apache.
+### Задание 4. Подключение по SSH
 
-**Adminer** (a web UI for the database) starts together with the app at http://localhost:8081.
-Log in with System `PostgreSQL`, Server `db`, Username `timecapsule`, Password `secret`,
-Database `timecapsule`. Change its port with `ADMINER_HOST_PORT`.
+![SSH и статус nginx](images_lab_2/ssh-nginx-status.png)
+*Успешное подключение по SSH и вывод `systemctl status nginx` (active (running)).*
 
-Useful commands:
+**Почему для входа на экземпляр EC2 используется ключ, а не пароль?**
+Вход по ключу основан на асимметричной криптографии: публичный ключ AWS кладёт на сервер в `~/.ssh/authorized_keys`, а приватный никогда не покидает компьютер пользователя. Такой ключ невозможно подобрать перебором, в отличие от пароля, и его нельзя перехватить при входе. Поэтому в образах Amazon Linux вход по паролю отключён по умолчанию.
+
+### Задание 5. Статический сайт
+
+![Сайт в браузере](images_lab_2/static-site.png)
+*Собственный сайт из трёх страниц по публичному IP.*
+
+![Файлы на сервере](images_lab_2/ls-html.png)
+*Вывод `ls -l /usr/share/nginx/html` с файлами index.html, about.html, contact.html.*
+
+**Что делает команда scp и чем она похожа на ssh?**
+scp копирует файлы между компьютерами по зашифрованному протоколу SSH. Она использует тот же ключ (`-i`), того же пользователя и тот же формат адреса `user@host`, что и ssh. Разница в том, что scp передаёт файлы, а ssh открывает интерактивную сессию на сервере.
+
+### Задание 6. Остановка экземпляра через AWS CLI
 
 ```bash
-docker compose exec db psql -U timecapsule             # SQL shell
-docker compose logs -f app                             # Apache logs
-docker compose down -v                                 # stop and delete all data
+aws ec2 stop-instances --instance-ids <ID-экземпляра> --region eu-north-1
 ```
 
-Guest mode (no login):
+![Остановка экземпляра](images_lab_2/stop-instances.png)  
+*Команда `aws ec2 stop-instances` и её вывод (переход в состояние stopping).*
 
-```
-AUTH_ENABLED=false docker compose up -d            # macOS / Linux
-$env:AUTH_ENABLED="false"; docker compose up -d    # Windows PowerShell
-```
+**Чем Stop отличается от Terminate? За что вы продолжаете платить, пока экземпляр остановлен?**
+Stop выключает виртуальную машину, но сохраняет её корневой том EBS и данные на нём, поэтому экземпляр можно запустить снова (публичный IP при этом сменится). Terminate удаляет экземпляр безвозвратно, а корневой том EBS по умолчанию удаляется вместе с ним. Пока экземпляр остановлен, оплата за вычисления не начисляется, но продолжается оплата хранения томов EBS, снимков и выделенных Elastic IP, если они есть.
 
-Other host ports:
+---
 
-```
-APP_HOST_PORT=9080 DB_HOST_PORT=5433 docker compose up -d                     # macOS / Linux
-$env:APP_HOST_PORT="9080"; $env:DB_HOST_PORT="5433"; docker compose up -d     # Windows PowerShell
-```
+## Часть 2. Продвинутый уровень
 
-In PowerShell these variables stay set until you close the window.
+### Задание 7. Организация и репозиторий на GitHub
 
-Uploaded files are stored in the `uploads` volume, mounted at `/var/www/html/storage/uploads`.
-Database data is stored in the `db-data` volume.
+Создана организация `eugeniu-noroc-cloud` и публичный репозиторий `timecapsule`, в который загружен код приложения.
 
-## Configuration
+**Почему папка vendor/ и файл .env не попали в репозиторий?**
+Оба пути указаны в `.gitignore`. Папка `vendor/` содержит сторонние библиотеки, которые занимают много места и точно воспроизводятся командой `composer install` по файлу `composer.lock`. Файл `.env` содержит пароли и настройки конкретного окружения, поэтому ему не место в общем, тем более публичном, репозитории.
 
-All settings are environment variables. Without Docker they come from `.env`, which is
-optional and is loaded by phpdotenv (`Dotenv\Dotenv::createImmutable(ROOT_DIR)->safeLoad()` in
-`src/bootstrap.php`). **Real environment variables always win over `.env`.** In Docker they are
-set in `docker-compose.yml`. The code reads every setting with `config()` in
-`src/helpers.php`: it checks `getenv()` first and then the values phpdotenv loaded into
-`$_ENV` / `$_SERVER`.
+### Задание 8. Подготовка сервера
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `APP_PORT` | `8080` | Documentation only. PHP does not listen on a port itself. |
-| `APP_URL` | `http://localhost:8080` | Public URL of the app |
-| `APP_DEBUG` | `false` | `true` shows the error message on the 500 page |
-| `DB_HOST` | `localhost` | PostgreSQL host |
-| `DB_PORT` | `5432` | |
-| `DB_NAME` | `timecapsule` | |
-| `DB_USER` | `timecapsule` | |
-| `DB_PASSWORD` | `secret` | |
-| `UPLOAD_DIR` | `storage/uploads` | Upload folder. A relative path starts at the project root. |
-| `MAX_UPLOAD_MB` | `5` | Maximum attachment size, in MB |
-| `MAIL_DELAY_SECONDS` | `3` | How long the simulated "send e-mail" step takes |
-| `AUTH_ENABLED` | `true` | `false`: no login, everybody is the built-in **Guest** user |
+**Почему мы устанавливаем эти пакеты вручную, а не добавляем их в User data?**
+User data выполняется только при первом запуске экземпляра, а наш экземпляр уже был запущен в Части 1, поэтому изменение User data ни на что не повлияло бы. Кроме того, ручная установка позволяет увидеть каждый шаг и сразу заметить ошибки. На практике для новых серверов такие шаги автоматизируют через User data или собственный AMI.
 
-PHP's own upload limits must be a bit larger than `MAX_UPLOAD_MB`, so that the app can show its
-own error message. Use `upload_max_filesize = 6M` and `post_max_size = 8M` (on Windows in
-`C:\php\php.ini`). The Docker image already sets these values in `docker/php.ini`.
+### Задание 9. База данных PostgreSQL
 
-## Dates and time zones
+![Проверка подключения к БД](images_lab_2/psql-select1.png)  
+*Успешное подключение по паролю: `psql -h localhost -U timecapsule -d timecapsule -c "SELECT 1;"`.*
 
-The "Open at" field on the New capsule form takes a date **and** a time. The browser sends your
-local time; the app stores UTC and shows times in the visitor's time zone.
+### Задание 10. Развёртывание кода приложения на сервере
 
-- The form has a visible `open_at` field (local time, e.g. `2027-01-01T13:30`) and a hidden
-  `open_at_utc` field. On submit, `public/js/app.js` fills `open_at_utc` with the same moment in
-  UTC (e.g. `2027-01-01T12:30:00.000Z`). The server uses that value.
-- Without JavaScript, only `open_at` arrives (from the browser's own date-time field). The server
-  cannot know the visitor's time zone then, so it reads the value as UTC.
-- Seconds are dropped. The open time must be in the future.
-- `capsules.open_at` and all other timestamps are stored in UTC.
-- Pages print every moment as `<time data-local datetime="2027-01-01T12:30:00Z">1 Jan 2027, 12:30 UTC</time>`
-  (`time_tag()` in `src/helpers.php`). `public/js/app.js` rewrites the text in the visitor's
-  local time; without JavaScript the UTC text stays.
-- Sealed capsules show a countdown: "Opens in N days", "Opens in N hours", "Opens in N minutes",
-  or "Opening soon…" when the time has passed but no request has opened the capsule yet.
-- The calendar and time picker is [flatpickr](https://flatpickr.js.org) (MIT license). Its
-  files are vendored in `public/vendor/flatpickr` (no build step, no CDN). If they fail to load,
-  the browser's own date-time field is used.
+![Инициализация БД](images_lab_2/init-db.png)  
+*Вывод `php bin/init-db.php`: Database is ready.*
 
-## How capsules open
+**Почему пароль к базе данных хранится в файле .env на сервере, а не в коде? Почему публичный репозиторий безопасен для этого приложения?**
+Код в репозитории может прочитать любой человек, поэтому секреты отделены от кода и хранятся только на сервере, к тому же они различаются в разных окружениях. Публичный репозиторий безопасен, потому что в нём нет ни паролей, ни ключей. База данных при этом слушает только localhost, и порт 5432 не открыт в Security Group, так что знание кода не даёт доступа к данным.
 
-When a capsule's open time has passed, the next page request opens it and adds an "is now open"
-notification. No cron job or background worker is needed.
+### Задание 11. Настройка PHP-FPM и nginx
 
-`public/index.php` calls `open_due_capsules()` (in `src/capsules.php`) at the start of every
-request except `GET /health` and static files, before any page is rendered. It runs one
-`UPDATE ... RETURNING` statement, which only returns the capsules it changed, so two requests at
-the same moment never open the same capsule twice.
+![nginx -t](images_lab_2/nginx-t.png)  
+*Проверка конфигурации: `sudo nginx -t` - syntax is ok, test is successful.*
 
-Quick test: make a capsule due in the database, then reload the page. With Docker:
+![Приложение в браузере](images_lab_2/app-browser.png)  
+*Страница входа TimeCapsule по публичному IP.*
+
+![Health check](images_lab_2/health.png)  
+*Ответ `/health`: `{"status":"ok","db":"ok",...}`.*
+
+### Задание 12. Обновление приложения
+
+Выбран вариант A: новая версия выпускается вручную. После подключения к серверу по SSH выполняются команды:
 
 ```bash
-docker compose exec db psql -U timecapsule -c "UPDATE capsules SET open_at = NOW() - interval '1 minute'"
-```
-
-Or run this SQL in any database client:
-
-```sql
-UPDATE capsules SET open_at = NOW() - interval '1 minute';
-```
-
-## Deploying to an Ubuntu server
-
-These steps are for Ubuntu 24.04. They put nginx, PHP-FPM and PostgreSQL on one server.
-All commands in this section run on the Linux server (for example over SSH from PowerShell:
-`ssh ubuntu@<server-ip>`), not on your Windows computer.
-
-**1. Install packages**
-
-```bash
-sudo apt update
-sudo apt install -y nginx composer php8.3-cli php8.3-fpm php8.3-pgsql php8.3-mbstring php8.3-xml unzip postgresql git
-```
-
-(`fileinfo` is already included in the PHP 8.3 packages. `unzip` lets Composer unpack the
-packages it downloads.)
-
-**2. Create the database and user**
-
-```bash
-sudo -u postgres psql -c "CREATE USER timecapsule WITH PASSWORD 'secret';"
-sudo -u postgres psql -c "CREATE DATABASE timecapsule OWNER timecapsule;"
-```
-
-**3. Copy the app and configure it**
-
-```bash
-sudo mkdir -p /var/www/timecapsule
-sudo chown ubuntu:ubuntu /var/www/timecapsule
-git clone <your-repo-url> /tmp/timecapsule-src
-cp -r /tmp/timecapsule-src/open_capsules_php_functional/. /var/www/timecapsule/
 cd /var/www/timecapsule
+git pull
 composer install --no-dev --optimize-autoloader
-cp .env.example .env
-nano .env                    # set DB_PASSWORD, APP_URL, ...
 php bin/init-db.php
+sudo systemctl reload php-fpm
 ```
 
-PHP-FPM does not pass system environment variables to PHP (`clear_env = yes`), so on the server
-the settings come from `.env`.
+![Ручной деплой](images_lab_2/manual-deploy.png)  
+*Выполнение команд обновления на сервере.*
 
-**4. File permissions**
+**Что может увидеть посетитель во время git pull? Что случится, если после git pull не выполнится composer install?**
+Во время `git pull` часть файлов уже новая, а часть ещё старая, поэтому посетитель может получить ошибку 500 или страницу, собранную из разных версий кода. Если новая версия требует новой библиотеки, а `composer install` не выполнен, PHP не найдёт нужный класс, и все страницы, где он используется, будут падать с ошибкой 500.
 
-PHP-FPM runs as `www-data` and must be able to write uploads and sessions:
+### Задание 13. Новая версия, поломка и откат
 
-```bash
-sudo chown -R www-data:www-data /var/www/timecapsule/storage
-sudo chmod -R 775 /var/www/timecapsule/storage
-```
+![Новая версия](images_lab_2/new-version.png)  
+*Новая версия: в подвале страницы отображается имя автора, ранее созданная капсула сохранилась.*
 
-**5. PHP upload limits**
+![Ошибка 500](images_lab_2/error-500.png)  
+*Ошибка 500 после деплоя версии с синтаксической ошибкой.*
 
-In `/etc/php/8.3/fpm/php.ini`, set:
+![После отката](images_lab_2/after-revert.png)  
+*Сайт снова работает после `git revert` и повторного деплоя.*
 
-```ini
-upload_max_filesize = 6M
-post_max_size = 8M
-```
+**Почему /health отвечает ok, хотя главная страница не работает? Что проверяет этот адрес? Чего не хватает такой проверке?**
+Маршрут `/health` не использует шаблон `views/layout.php`, поэтому ошибка в нём на этот маршрут не влияет. Он проверяет только, что PHP-FPM выполняет код и приложение может подключиться к базе данных. Такой проверке не хватает проверки реальных пользовательских страниц, например smoke-теста главной страницы после каждого деплоя.
 
-Then restart PHP-FPM: `sudo systemctl restart php8.3-fpm`.
+**Сколько времени сайт был сломан? Из каких шагов сложилось это время? Как его сократить?**
+Сайт был сломан около 2,5 минут: с 02:34:42 (деплой версии с ошибкой) до 02:37:11 (завершение повторного деплоя после отката). Это время сложилось из обнаружения ошибки в браузере, выполнения `git revert` и `git push` на своём компьютере, подключения к серверу и повторного выполнения команд деплоя вручную. Сократить его можно проверкой кода до деплоя (`php -l`, автотесты в CI), автоматической проверкой страниц сразу после деплоя с автоматическим откатом, а также хранением предыдущей версии на сервере, чтобы откат был просто переключением на неё.
 
-**6. nginx**
+### Задание 14. Архитектура и решение
 
-```bash
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/timecapsule
-sudo ln -s /etc/nginx/sites-available/timecapsule /etc/nginx/sites-enabled/timecapsule
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
-```
+![Схема архитектуры](images_lab_2/architecture.png)  
+*Схема развёртывания TimeCapsule на одном экземпляре EC2 в регионе eu-north-1.*
 
-The site's document root is `/var/www/timecapsule/public`, so `src/`, `vendor/`, `storage/` and
-`.env` are not reachable from the web.
+ADR: [docs/adr/0001-deploy-method.md](docs/adr/0001-deploy-method.md)  
 
-**7. Firewall and check**
+---
 
-Allow HTTP (port 80) from everywhere and SSH (port 22) only from your own IP, for example
-with `ufw`:
+## Ответы на контрольные вопросы
 
-```bash
-sudo ufw allow from <your-ip> to any port 22
-sudo ufw allow 80/tcp
-sudo ufw enable
-```
+**1. Как проходит запрос от браузера до базы данных? Какую роль играет каждая программа?**
+Запрос из браузера проходит через Security Group (порт 80) и попадает в nginx. Существующие статические файлы nginx отдаёт сам, а остальные запросы передаёт front controller `index.php` через unix-сокет в PHP-FPM. PHP-FPM выполняет код приложения, которое через драйвер `pdo_pgsql` обращается к PostgreSQL на localhost:5432. Готовый HTML возвращается по той же цепочке обратно в браузер.
 
-Then open `http://<server-ip>/` and `http://<server-ip>/health`.
+**2. Почему сервер может скачивать код из репозитория, но не может отправлять в него изменения? Почему это правильно?**
+Публичный репозиторий можно клонировать по HTTPS без авторизации, а для `git push` нужны учётные данные GitHub (токен или SSH-ключ), которых на сервере нет. Это соответствует принципу минимальных привилегий: серверу нужно только читать код. Даже если сервер взломают, злоумышленник не сможет изменить код в репозитории.
 
-**Updating the app later:** copy the new files, run `composer install --no-dev
---optimize-autoloader` again (in case `composer.lock` changed), and restart PHP-FPM:
-`sudo systemctl restart php8.3-fpm`.
+**3. Что произойдёт с загруженными файлами, если удалить экземпляр EC2? Как это связано с EBS?**
+Загруженные файлы и база данных хранятся на корневом томе EBS экземпляра. У корневого тома по умолчанию установлен флаг DeleteOnTermination, поэтому при Terminate том и все данные на нём удаляются безвозвратно. При Stop том сохраняется. Чтобы не потерять данные, нужны снимки EBS или вынос файлов и базы в отдельные сервисы (S3, RDS).
+
+**4. Что общего у deploy.sh или ручных команд с CI/CD? Чего ещё не хватает?**
+Общее - сама последовательность шагов: взять код из репозитория, установить зависимости, применить изменения в базе и перезапустить приложение. CI/CD выполняет те же шаги. Не хватает автоматического запуска при `git push`, тестов и проверок перед деплоем, проверки после деплоя с автоматическим откатом, деплоя без простоя, а также истории и уведомлений о выпусках.
+
+---
+
+## Использованные источники
+
+- Лекция 4 «Вычислительные сервисы. Amazon EC2 и machine identity», Hands-on 4.1–4.3
+- [Документация Amazon EC2](https://docs.aws.amazon.com/ec2/)
+- [Репозиторий msu-cloud-course/app-samples](https://github.com/msu-cloud-course/app-samples)
