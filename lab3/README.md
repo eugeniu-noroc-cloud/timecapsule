@@ -212,10 +212,10 @@ Security Group — лишь один слой защиты. Если прави�
 
 ## Задание 14. Архитектура и решение
 
-![Схема архитектуры](images/14-architecture.png)  
+![Схема архитектуры](images/lab3-architecture.png)  
 *Сеть timecapsule-dev-vpc в регионе eu-north-1: две зоны, четыре подсети, bastion, app-server, db-server, приватная зона Route 53 и временный NAT Gateway.*
 
-ADR: [docs/adr/0002-database-placement.md](../adr/0002-database-placement.md)  
+ADR: [docs/adr/0002-database-placement.md](../docs/adr/0002-database-placement.md)  
 
 ---
 
