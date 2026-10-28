@@ -40,16 +40,16 @@ VPC: `10.28.0.0/16`
 
 ### Задание 3. Internet Gateway и таблицы маршрутов
 
-![Маршруты public-rt](images/03-public-rt-routes.png)
+![Маршруты public-rt](images/03-public-rt-routes.png)  
 *public-rt: локальный маршрут 10.28.0.0/16 и маршрут 0.0.0.0/0 в timecapsule-dev-igw.*
 
-![Подсети public-rt](images/03-public-rt-subnets.png)
+![Подсети public-rt](images/03-public-rt-subnets.png)  
 *public-rt связана с подсетями public-a и public-b.*
 
-![Маршруты private-rt](images/03-private-rt-routes.png)
+![Маршруты private-rt](images/03-private-rt-routes.png)  
 *private-rt: только локальный маршрут 10.28.0.0/16.*
 
-![Подсети private-rt](images/03-private-rt-subnets.png)
+![Подсети private-rt](images/03-private-rt-subnets.png)  
 *private-rt связана с подсетями private-a и private-b.*
 
 **Какой маршрут есть в обеих таблицах, хотя вы его не добавляли? Что он даёт? Куда уйдёт пакет из private-a, адресованный 8.8.8.8?**
@@ -57,13 +57,13 @@ VPC: `10.28.0.0/16`
 
 ### Задание 4. Security Group
 
-![bastion-sg](images/04-bastion-sg.png)
+![bastion-sg](images/04-bastion-sg.png)  
 *bastion-sg: SSH (22) только с моего IP.*
 
-![web-sg](images/04-web-sg.png)
+![web-sg](images/04-web-sg.png)  
 *web-sg: HTTP (80) отовсюду, SSH (22) только от bastion-sg.*
 
-![db-sg](images/04-db-sg.png)
+![db-sg](images/04-db-sg.png)  
 *db-sg: PostgreSQL (5432) только от web-sg, SSH (22) только от bastion-sg.*
 
 **Почему в db-sg источником указана группа web-sg, а не адрес веб-сервера или диапазон 10.28.0.0/16?**
@@ -71,10 +71,10 @@ VPC: `10.28.0.0/16`
 
 ### Задание 5. Экземпляры
 
-![Страница web-server](images/05-web-browser.png)
+![Страница web-server](images/05-web-browser.png)  
 *Страница web-server по публичному IP: имя сервера и приватный адрес из 10.28.0.0/24.*
 
-![Зависшая установка на db-server](images/05-db-dnf-hang.png)
+![Зависшая установка на db-server](images/05-db-dnf-hang.png)  
 *`sudo dnf -y install postgresql16-server` на db-server зависает: выхода в интернет нет.*
 
 **Почему db-server не может скачать пакеты, хотя web-server это делает? Что нужно добавить в сеть?**
@@ -82,13 +82,13 @@ db-server находится в private-a: в private-rt нет маршрута
 
 ### Задание 6. Временный NAT Gateway
 
-![checkip на db-server](images/06-checkip.png)
+![checkip на db-server](images/06-checkip.png)  
 *`curl https://checkip.amazonaws.com` на db-server возвращает Elastic IP NAT Gateway.*
 
-![Маршрут Blackhole](images/06-blackhole.png)
+![Маршрут Blackhole](images/06-blackhole.png)  
 *Маршрут 0.0.0.0/0 в private-rt в состоянии Blackhole после удаления NAT Gateway.*
 
-![NAT Gateway Deleted](images/06-nat-deleted.png)
+![NAT Gateway Deleted](images/06-nat-deleted.png)  
 *NAT Gateway timecapsule-dev-nat-a в состоянии Deleted.*
 
 Маршрут в Blackhole после скриншота удалён, Elastic IP шлюза освобождён.
@@ -108,31 +108,31 @@ NAT нужен только для исходящих соединений db-se
 
 ### Задание 7. Проверки
 
-![psql с web-server](images/07-psql-web.png)
+![psql с web-server](images/07-psql-web.png)  
 *Подключение к базе lab3 с web-server: `SELECT version();` возвращает версию PostgreSQL 16.*
 
-![Порт 5432 с web-server и bastion](images/07-port-check.png)
+![Порт 5432 с web-server и bastion](images/07-port-check.png)  
 *Порт 5432 db-server: с web-server — open, с bastion — closed.*
 
 **Почему с web-server порт открыт, а с bastion нет, хотя маршрут между ними есть?**
 Маршрут только определяет, куда пакет может дойти, а решение, пустить ли его, принимает Security Group. В db-sg порт 5432 открыт только для источника web-sg. У web-server эта группа есть, у bastion — только bastion-sg, поэтому его пакеты на 5432 отбрасываются.
 
-![curl с db-server](images/07-curl-github.png)
+![curl с db-server](images/07-curl-github.png)  
 *`curl -m 5 https://github.com` с db-server завершается по таймауту.*
 
 **Почему запрос не проходит? Можно ли из интернета подключиться к 5432 db-server?**
 NAT Gateway удалён, в private-rt нет маршрута 0.0.0.0/0, поэтому исходящий пакет некуда отправить. Подключиться из интернета тоже нельзя: по цепочке «маршрут → адрес → фильтры» у private-a нет маршрута в Internet Gateway, у db-server нет публичного адреса, а даже внутри VPC порт закрыт db-sg и ограничен pg_hba.conf.
 
-![Правило Network ACL](images/07-nacl-rule.png)
+![Правило Network ACL](images/07-nacl-rule.png)  
 *Правило 90 в Network ACL: Deny All traffic с моего IP.*
 
-![Блокировка](images/07-nacl-blocked.png)
+![Блокировка](images/07-nacl-blocked.png)  
 *SSH на bastion и сайт с моего IP не работают, с телефона через мобильный интернет сайт открывается.*
 
 **Почему заблокировано и SSH, и сайт? Почему с телефона сайт открывается? Почему номер меньше 100?**
 Network ACL работает на границе подсети, до Security Group: пакет с моего адреса отбрасывается раньше, чем Security Group вообще его увидит, поэтому заблокирован весь трафик — и SSH, и HTTP. У телефона в мобильной сети другой внешний IP, под правило он не попадает. Правила Network ACL проверяются по возрастанию номера до первого совпадения, а в ACL по умолчанию есть правило 100 «Allow all». Правило с номером больше 100 никогда бы не сработало.
 
-![Tag Editor](images/07-tag-editor.png)
+![Tag Editor](images/07-tag-editor.png)  
 *Tag Editor: все ресурсы с тегом Project = timecapsule.*
 
 **Как по тегам найти ресурсы для удаления? Зачем тег Owner в личном аккаунте?**
@@ -149,7 +149,7 @@ Network ACL работает на границе подсети, до Security G
 
 ### Задание 9. Elastic IP
 
-![Приложение по Elastic IP](images/09-app-eip.png)
+![Приложение по Elastic IP](images/09-app-eip.png)  
 *Приложение TimeCapsule открывается по Elastic IP, выполнен вход под пользователем из ЛР2.*
 
 **Почему Elastic IP нужен app-server, но не bastion? Сколько он стоит у остановленного сервера? Понадобится ли он с балансировщиком?**
@@ -162,13 +162,13 @@ Security Group — лишь один слой защиты. Если прави�
 
 ### Задание 11. Приватная зона Route 53
 
-![Запись db](images/11-route53-record.png)
+![Запись db](images/11-route53-record.png)  
 *Запись A `db.timecapsule.internal` в приватной зоне указывает на приватный IP db-server.*
 
-![dig с app-server](images/11-dig-app.png)
+![dig с app-server](images/11-dig-app.png)  
 *`dig +short db.timecapsule.internal` с app-server возвращает 10.28.10.x.*
 
-![nslookup с компьютера](images/11-nslookup-local.png)
+![nslookup с компьютера](images/11-nslookup-local.png)  
 *`nslookup db.timecapsule.internal` с моего компьютера: имя не найдено.*
 
 **Почему с app-server имя находится, а с компьютера нет? Что изменить, если db-server пересоздадут?**
@@ -176,13 +176,13 @@ Security Group — лишь один слой защиты. Если прави�
 
 ### Задание 12. Перенос данных и переключение приложения
 
-![Загрузка дампа](images/12-psql-import.png)
+![Загрузка дампа](images/12-psql-import.png)  
 *`psql -h db.timecapsule.internal ... -f timecapsule.sql` загружает таблицы и строки в новую базу.*
 
-![Health](images/12-health.png)
+![Health](images/12-health.png)  
 *`/health` после переключения: `"db":"ok"`.*
 
-![Капсулы из ЛР2](images/12-capsules.png)
+![Капсулы из ЛР2](images/12-capsules.png)  
 *Капсулы, созданные в ЛР2, на месте после переноса базы.*
 
 **Где лежат прикреплённые файлы? Что с ними будет, если удалить app-server?**
@@ -190,32 +190,32 @@ Security Group — лишь один слой защиты. Если прави�
 
 ### Задание 13. Деплой и обслуживание
 
-![LR3 на странице](images/13-lr3-footer.png)
+![LR3 на странице](images/13-lr3-footer.png)  
 *Новая версия с отметкой «LR3» в подвале, выпущенная через bastion.*
 
 **Почему в командах деплоя ничего менять не пришлось?**
 Команды деплоя работают на самом сервере и не зависят от того, как я к нему подключаюсь. Путь через bastion описан в `~/.ssh/config` (ProxyJump), поэтому `ssh app` выглядит так же просто, как раньше. Адрес базы приложение берёт из `.env`, а его деплой не трогает.
 
-![Health при остановленной базе](images/13-health-db-down.png)
+![Health при остановленной базе](images/13-health-db-down.png)  
 *`/health` при остановленном db-server: `"db":"error"`.*
 
 **Что показал /health и почему? Изменился ли приватный адрес db-server?**
 `/health` вернул `"db":"error"`, а главная страница — ошибку: PHP-FPM работает, но не может подключиться к db.timecapsule.internal. После запуска db-server приложение заработало само, ничего менять не пришлось: приватный адрес экземпляра сохраняется при остановке и запуске, меняется только публичный.
 
-![dnf update на db-server](images/13-dnf-update.png)
+![dnf update на db-server](images/13-dnf-update.png)  
 *`sudo dnf -y update --refresh` на db-server через временный NAT Gateway: метаданные репозиториев загружены заново, `checkip` показывает адрес нового NAT.*
 
-![NAT gateways](images/13-nat-gateways.png)
+![NAT gateways](images/13-nat-gateways.png)  
 *Временный NAT Gateway timecapsule-dev-nat-a в состоянии Available на время обновления; после `dnf update` шлюз, маршрут и его Elastic IP удалены.*
 
 ---
 
 ## Задание 14. Архитектура и решение
 
-![Схема архитектуры](images/14-architecture.png)
+![Схема архитектуры](images/14-architecture.png)  
 *Сеть timecapsule-dev-vpc в регионе eu-north-1: две зоны, четыре подсети, bastion, app-server, db-server, приватная зона Route 53 и временный NAT Gateway.*
 
-ADR: [docs/adr/0002-database-placement.md](../adr/0002-database-placement.md)
+ADR: [docs/adr/0002-database-placement.md](../adr/0002-database-placement.md)  
 
 ---
 
@@ -223,10 +223,10 @@ ADR: [docs/adr/0002-database-placement.md](../adr/0002-database-placement.md)
 
 Сервер `webserver-eugeniu` из ЛР2 не завершён, а остановлен: он временно сохранён до защиты ЛР2 и будет завершён после неё. Экземпляры bastion, app-server и db-server остановлены, временный web-server из Части 1 завершён, образ `timecapsule-dev-app-lab2` и его снимок удалены.
 
-![Elastic IPs](images/99-final-eip.png)
+![Elastic IPs](images/99-final-eip.png)  
 *После завершения работы остался только Elastic IP app-server.*
 
-![NAT gateways](images/99-final-nat.png)
+![NAT gateways](images/99-final-nat.png)  
 *Нет NAT Gateway в состоянии Available.*
 
 ---
