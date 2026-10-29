@@ -220,7 +220,7 @@ ADR: [docs/adr/0002-database-placement.md](../docs/adr/0002-database-placement.m
 
 ## Итог
 
-Сервер `webserver-eugeniu` из ЛР2 не завершён, а остановлен: он временно сохранён до защиты ЛР2 и будет завершён после неё. Экземпляры bastion, app-server и db-server остановлены, временный web-server из Части 1 завершён, образ `timecapsule-dev-app-lab2` и его снимок удалены.
+Экземпляры bastion, app-server и db-server остановлены, временный web-server из Части 1 завершён, образ `timecapsule-dev-app-lab2` и его снимок удалены.
 
 ![Elastic IPs](images/99-final-eip.png)  
 *После завершения работы остался только Elastic IP app-server.*
